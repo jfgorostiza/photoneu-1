@@ -224,8 +224,8 @@ class Controller:
         print(self.p)
         t3 = cv.getTickCount()
         tmotor = (t1 - t0)/cv.getTickFrequency()
-        tcam1 = (t2 - t1)/cv.getTickFrequency()
-        tcam2  = (t3 - t2)/cv.getTickFrequency()
+        tcam1 = (t2 - t1)/cv.getTickFrequency() # tiempo de espera para que la imagen se estabilice
+        tcam2  = (t3 - t2)/cv.getTickFrequency() # tiempo adicional de añaidr el punto a la lista
         return tmotor, tcam1, tcam2, t, x, y
     
 #TODO track mice in realtime
