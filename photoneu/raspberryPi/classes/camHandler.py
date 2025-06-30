@@ -79,14 +79,14 @@ class Target:
         self.mean_color = (0,0,0) # Color del target en BGR 
         self.measured_pos = np.array([0, 0]) # posicion dada por la camara
         self.pos = np.array([0, 0]) # posicion filtrada
-        self.vel = np.array([0, 0]) # velocidad filtrada
+        self.vel = np.array([0.0, 0.0]) # velocidad filtrada
         self.pos_old = np.array([0, 0])
         self.area = 0
         self.is_moving = False
         self.is_moving_old = False
         self.is_tracked = False
         self.vel_mod = 0.0
-        self.v_thres = 4
+        self.v_thres = 0# 4 e-16
         self.radius = 1 # ratio of circle in pixels
         self.boundingRect = None
         self.roi = None
@@ -94,6 +94,8 @@ class Target:
         self.n_stopped_frames = 0
         self.pbm_total_time = 20 # tiempo total de tratamiento PBM que se debe aplicar
         self.pbm_time = 0 # tiempo parcial aplicado
+        self.time_stamp = cv.getTickCount() # instante de cada lectura de posición
+        self.time_stamp_old = 0 # instante de cada lectura de posición
 
 #        self.track_window = track_window
 #        self.term_crit = (cv.TERM_CRITERIA_COUNT | cv.TERM_CRITERIA_EPS, 10, 1)
@@ -115,9 +117,11 @@ class Target:
         self.pos[0] = min(self.pos[0], self.pos_limits[1])
         self.pos[1] = max(self.pos[1], self.pos_limits[2])
         self.pos[1] = min(self.pos[1], self.pos_limits[3])
-
-        self.vel[0] = self.pos[0] - self.pos_old[0]
-        self.vel[1] = self.pos[1] - self.pos_old[1]
+        tau = abs(self.time_stamp - self.time_stamp_old)/ cv.getTickFrequency() * 1000
+#        print("camHandler::tau = " + str(tau))
+        if (tau == 0 ): tau = 1
+        self.vel[0] = (self.pos[0] - self.pos_old[0]) / tau
+        self.vel[1] = (self.pos[1] - self.pos_old[1]) / tau
         self.vel_mod = self.vel[0] * self.vel[0] + \
             self.vel[1] * self.vel[1]
 #        print("CamHandler::v_head = " + str(self.vel))
@@ -138,6 +142,7 @@ class Target:
  #           print( "<<<<Target::target stopped" )
 #
         self.pos_old = np.copy( self.pos )
+        self.time_stamp_old = self.time_stamp
         self.is_moving_old = self.is_moving
 
 class CamHandler:
@@ -163,9 +168,9 @@ class CamHandler:
 #        self.color_v = {'red':[60,130],'red_2':[60,255],'yellow':[22,255],'green':[60,255],'blue':[60,255]}
 #       Estos datos pueden calibrarse utilizando test_inRange.py
 #        self.color_h = {'red':[150,180],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
-        self.color_h = {'red':[0,38],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
-        self.color_s = {'red':[133,255],'green':[38,255],'blue':[130,255],'dark_blue':[140,255],'yellow':[78,118]}  
-        self.color_v = {'red':[130,255],'green':[0,255],'blue':[68,255],'dark_blue':[93,255],'yellow':[10,255] }
+        self.color_h = {'red':[0,180],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
+        self.color_s = {'red':[130,255],'green':[38,255],'blue':[130,255],'dark_blue':[140,255],'yellow':[78,118]}  
+        self.color_v = {'red':[80,255],'green':[0,255],'blue':[68,255],'dark_blue':[93,255],'yellow':[10,255] }
         self.cap = cv.VideoCapture( 0 )
         if( self.cap.isOpened() == False):
             print("CamHandler::Error opening camera")
@@ -238,12 +243,12 @@ class CamHandler:
                         target.radius  
 
                 mice_label = target.color_id + "_mice v = "
-                cv.putText( frame, mice_label + str(target.vel_mod),(40, 40 + 20 * i), \
+                cv.putText( frame, mice_label + f"{target.vel_mod:.2e}",(10, 40 + 20 * i), \
                            cv.FONT_HERSHEY_SIMPLEX, 0.5,target.mean_color,1)
                 color = (0,100,255)
                 if(target.is_tracked): 
                     color = target.mean_color   #(100,255,0)
-                cv.putText( frame,"tracked: " + str(target.is_tracked),(200,40 + 20*i), \
+                cv.putText( frame,"tracked: " + str(target.is_tracked),(10,60 + 20*i), \
                            cv.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             
                 if target.is_tracked == True:
@@ -257,7 +262,7 @@ class CamHandler:
                 cv.circle(frame, (x, y), 5, (255, 255, 0), 1) # circulo central del F. Kalman
 #                cv.putText(frame,str(x) + "," + str(y),(x,y+5), cv.FONT_HERSHEY_SIMPLEX, 0.5,(0,0,255),1)
                 i += 1
-#                self.showImage( frame, frame_threshold)
+ #               self.showImage( frame, frame_threshold)
                 t5 = cv.getTickCount()
                 t_read = (t1 - t0) / cv.getTickFrequency() # t-leer la imagen
                 t_filter = (t2 - t1_1) / cv.getTickFrequency() # t - filtro color
@@ -361,6 +366,7 @@ class CamHandler:
         """
         #@TODO: contour is target? yes, update target; no, create new target.
 #        print(target.color_id)
+        # Incluir un time_stamp de la medida de la posición para calcular la velocidad con más precisión.
         if len(contours) == 0:
             target.is_tracked = False
         else:
@@ -375,6 +381,7 @@ class CamHandler:
             target.boundingRect = cv.boundingRect(c)      # Decompose the c#ontour into the coordinates of the upper left corner and the width and height of the recognition 
             (c_x,c_y), target.radius = cv.minEnclosingCircle(c)
             target.radius= int(target.radius)
+            target.time_stamp = cv.getTickCount()
 
     def printValues( self, x, y ):
 #        n, x, y = self.findContours()
