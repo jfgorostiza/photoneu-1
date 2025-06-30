@@ -4,9 +4,17 @@ import cv2 as cv
 import argparse
 import numpy as np
 import time
+from datetime import datetime
 from matplotlib import pyplot as plt
 
+# Toma la ruta de la carpeta donde están las imágenes y realizar el análisis de convexidad
+# Guarda los resultados en un DataFrame, en las carpetas del dataset, como "no_labels"
+# y en un archivo CSV con los tiempos de procesamiento y coordenadas de los ratones detectados.
+# El nombre del archivo incluye el parámetro de umbral utilizado.
+
+#ruta_carpeta = r'C:\Users\inges\OneDrive - UDIT\src\photoneu\dataset\deeplabcut\labeled-data-ordered'
 ruta_carpeta = r'C:\Users\inges\OneDrive - UDIT\src\photoneu\dataset\deeplabcut\labeled-data-ordered'
+#ruta_carpeta = r'..\..\..\dataset\deeplabcut\labeled-data-ordered'
 #ruta_carpeta_2 = r'C:\Users\inges\OneDrive - UDIT\src\photoneu\dataset\deeplabcut\trimice-dlc-2021-06-22\labeled-data\videocompressed1_labeled'
 #ruta_carpeta_2 =r'C:\Users\inges\OneDrive - UDIT\src\photoneu\dataset\deeplabcut\labeled-data-ordered'
 ruta_carpeta_2 =r'C:\Users\inges\OneDrive - UDIT\src\photoneu\dataset\deeplabcut\trimice-dlc-2021-06-22\evaluation-results\iteration-0\trimiceJun22-trainset70shuffle1\LabeledImages_DLC_mobnet_35_trimiceJun22shuffle1_10000_snapshot-10000'
@@ -29,19 +37,19 @@ parser.add_argument('--camera', help='Camera divide number.', default=0, type=in
 args = parser.parse_args()
 #cap = cv.VideoCapture(args.camera)
 #img_path = r'/home/ratoncillos/OneDrive/src/photoneu/dataset/deeplabcut/labeled-data-ordered/img0253.png'
-
 RESIZE_FACTOR = 2.0
 MAJOR_DEFECT_THRESHOLD = 12.0 / RESIZE_FACTOR #6.0 5.0 12.0
 MIN_AREA = 800
 MAX_AREA = 12 * MIN_AREA#2.5 * MIN_AREA
 thres = 49 # min B/W value for threshold
-N = 113 # number of images
+N = 161 # number of images
 #N = 242 # frames video_2 video_4
 #N = 302 # framse video_3
 #N = 1801 # framse video_5
 #N = 1801 # framse video_6
 
 
+# img size original: 640 x 480
 normal_size = (480, 640)
 x_crop_min = int(normal_size[1]/10) #50
 x_crop_max = int(normal_size[1]/20) # 30
@@ -76,16 +84,21 @@ def process_blob(blob):
     inter_points = []
     split_contours = []
     if defects is not None :
+#       print("defects:", defects)
        for i, defect in enumerate(np.squeeze(defects, 1)):#defects.shape[0]):
           s,e,f,d = defect
           start = tuple(contour[s])
           end = tuple(contour[e])
           far = tuple(contour[f])
           real_far_dist = d / 256.0
+#          print("real_far_dist:", real_far_dist)
           if real_far_dist >= MAJOR_DEFECT_THRESHOLD:
                intersections.append(f)
                inter_points.append(far)
+    intersections.sort()
     n_points = len(intersections)
+    print("n_points:", n_points)
+    print("len(contour):", len(contour))
     if (n_points == 0):
         split_contours = [contour]
     elif n_points == 1:
@@ -109,6 +122,14 @@ def process_blob(blob):
             blob["segments"][0], blob["segments"][1]
         ]
     elif n_points == 2:
+        print("intersections[0]:", intersections[0])
+        print("intersections[1]:", intersections[1])
+        if intersections[0] > intersections[1]:
+            intersections[0], intersections[1] = intersections[1], intersections[0]
+        blob["segments"] = [
+                contour[intersections[0]:intersections[1]+1]
+                , np.vstack([contour[intersections[1]:],contour[:intersections[0]+1]])
+            ]
         blob["segments"] = [
             contour[intersections[0]:intersections[1]+1]
             , np.vstack([contour[intersections[1]:],contour[:intersections[0]+1]])
@@ -117,6 +138,10 @@ def process_blob(blob):
             blob["segments"][0], blob["segments"][1]
         ]
     elif n_points == 3:
+        print("intersections[0]:", intersections[0])
+        print("intersections[1]:", intersections[1])
+        print("intersections[2]:", intersections[2])
+
         blob["segments"] = [
             contour[intersections[0]:intersections[1]+1]
             , contour[intersections[1]:intersections[2]+1]
@@ -126,6 +151,10 @@ def process_blob(blob):
             blob["segments"][0], blob["segments"][1], blob["segments"][2]
         ]
     elif n_points == 4:
+        print("intersections[0]:", intersections[0])
+        print("intersections[1]:", intersections[1])
+        print("intersections[2]:", intersections[2])
+        print("intersections[3]:", intersections[3])
         blob["segments"] = [
             contour[intersections[0]:intersections[1]+1]
             , contour[intersections[1]:intersections[2]+1]
@@ -133,8 +162,18 @@ def process_blob(blob):
             , np.vstack([contour[intersections[3]:],contour[:intersections[0]+1]])
         ]
         split_contours = [
-            np.vstack([blob["segments"][0], blob["segments"][2]])
-            , np.vstack([blob["segments"][1], blob["segments"][3]])
+            blob["segments"][0], blob["segments"][1],blob["segments"][2], blob["segments"][3]
+        ]
+    elif n_points == 5:
+        blob["segments"] = [
+            contour[intersections[0]:intersections[1]+1]
+            , contour[intersections[1]:intersections[2]+1]
+            , contour[intersections[2]:intersections[3]+1]
+            , contour[intersections[2]:intersections[4]+1]
+            , np.vstack([contour[intersections[4]:],contour[:intersections[0]+1]])
+        ]
+        split_contours = [
+            blob["segments"][0], blob["segments"][1],blob["segments"][2], blob["segments"][3], blob["segments"][4]
         ]
     else :
        for i in range(0,len(contour),n_points):
@@ -143,6 +182,7 @@ def process_blob(blob):
              split_contours.append(split_contour)
     blob["split_contours"] = split_contours
     for c in split_contours:
+        print("split_contour_len:", len(c))
         if len(c) >= 5:
             blob["ellipses"].append(cv.fitEllipse(c))            
         else:
@@ -188,8 +228,9 @@ def detectMice( frame, high_V, t_init_resize ):
                 blob["areas"].append( area )
                 box = cv.boxPoints(rect)
                 box = np.intp(box)       
-#                cv.polylines(frame_defects, [split_contour], False, SEGMENT_COLORS[n%4], 2)
-                cv.polylines(frame_defects, [split_contour], False, SEGMENT_COLORS[n%4], 2)         
+                cv.polylines(frame_defects, [split_contour], False, SEGMENT_COLORS[n%4], 2)   
+            cv.drawContours(frame_defects, [blob["hull"]], 0, (0,255,0), 2)      
+#            cv.drawContours(frame_defects, [blob["contour"]], 0, (155,100,0), 2)
             for n, p in enumerate(blob["inter_points"]):
                 cv.circle(frame_defects, p, 3, (0,0,255))
             for n, e in enumerate(blob["ellipses"]):
@@ -341,8 +382,11 @@ def updateDataFrame():
     print(df_tmp[df_tmp["num_mice"] >= 3])
     print("n_total_mice = " + str(sum( df_tmp["num_mice"] )))
     print("n_files_3_mices = " + str(df_tmp[df_tmp["num_mice"] == 3].shape[0]))
-    fn = "no_labels_test_" + str(thres) + ".csv"
-    df_times.to_csv('no_labels_test_times.csv')
+    fn = "../logs/"
+    fn += datetime.now().strftime("%Y_%m_%d_%I_%M_%S") 
+    fn += "_no_labels_test_" + str(thres) + ".csv"
+    
+    df_times.to_csv('../logs/no_labels_test_times.csv')
     print(fn)
     df_tmp.to_csv(fn)
 
@@ -368,7 +412,7 @@ cols = ["mus_1_x", "mus_1_y", "mus_1_area", "mus_2_x", "mus_2_y", "mus_2_area", 
 for i, img in enumerate(df['img_path']):
     analyze_image_from_path(i, ruta_carpeta, img)
 updateDataFrame()
-
-#analyze_image_from_path(0,ruta_carpeta = ruta_carpeta_2, img_name = ruta_imagen)
+#ruta_imagen = r'/img0734.png'
+#analyze_image_from_path(0,ruta_carpeta = ruta_carpeta, img_name = ruta_imagen)
 #analyze_video( video_path )
 #cv.destroyAllWindows()
