@@ -162,9 +162,10 @@ class CamHandler:
 #        self.color_s = {'red':[80,255], 'red_2':[20,255],'yellow':[22,255],'green':[42,255],'blue':[122,255]}  
 #        self.color_v = {'red':[60,130],'red_2':[60,255],'yellow':[22,255],'green':[60,255],'blue':[60,255]}
 #       Estos datos pueden calibrarse utilizando test_inRange.py
-        self.color_h = {'red':[150,180],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
-        self.color_s = {'red':[40,255],'green':[38,255],'blue':[130,255],'dark_blue':[140,255],'yellow':[78,118]}  
-        self.color_v = {'red':[88,255],'green':[0,255],'blue':[68,255],'dark_blue':[93,255],'yellow':[10,255] }
+#        self.color_h = {'red':[150,180],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
+        self.color_h = {'red':[0,38],'green':[38,88],'blue':[87,111],'dark_blue':[114,165],'yellow':[13,37]}  #Here is the range of H in the HSV color space represented by the color
+        self.color_s = {'red':[133,255],'green':[38,255],'blue':[130,255],'dark_blue':[140,255],'yellow':[78,118]}  
+        self.color_v = {'red':[130,255],'green':[0,255],'blue':[68,255],'dark_blue':[93,255],'yellow':[10,255] }
         self.cap = cv.VideoCapture( 0 )
         if( self.cap.isOpened() == False):
             print("CamHandler::Error opening camera")
@@ -256,7 +257,7 @@ class CamHandler:
                 cv.circle(frame, (x, y), 5, (255, 255, 0), 1) # circulo central del F. Kalman
 #                cv.putText(frame,str(x) + "," + str(y),(x,y+5), cv.FONT_HERSHEY_SIMPLEX, 0.5,(0,0,255),1)
                 i += 1
-                self.showImage( frame, frame_threshold)
+#                self.showImage( frame, frame_threshold)
                 t5 = cv.getTickCount()
                 t_read = (t1 - t0) / cv.getTickFrequency() # t-leer la imagen
                 t_filter = (t2 - t1_1) / cv.getTickFrequency() # t - filtro color
@@ -338,7 +339,7 @@ class CamHandler:
         num_contours = len(contours) # Count the number of contours
         a = frame.shape[1] * 10 / 100 # mark is about220% of frame width: 370px2
         a = int(a*a)
-        area_min = 80 #a - a / 2# less 20%
+        area_min = 10 #a - a / 2# less 20%
         area_max = a + a / 2 # plus 20%
 
         if num_contours > 0: 

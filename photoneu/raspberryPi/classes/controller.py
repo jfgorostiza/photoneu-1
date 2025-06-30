@@ -126,7 +126,7 @@ class Controller:
             
     def calibrate(self):
         self.take_calibration_data()
-        self.analyze_calibration_data(self.file_name)
+#        self.analyze_calibration_data(self.file_name)
 
     def take_calibration_data( self ):
         self.set_target_color("red")
