@@ -15,7 +15,6 @@ from matplotlib import pyplot as plt
 ruta_carpeta = r'/home/ratoncillo/photoneu/labeled-data-ordered'
 ruta_carpeta_2 =r'/home/ratoncillo/photoneu/MovAI.v1.tensorflow'
 
-##############################################
 kernel_3 = cv.getStructuringElement(cv.MORPH_ELLIPSE,(3,3))
 kernel_5 = cv.getStructuringElement(cv.MORPH_ELLIPSE,(5,5))
 RESIZE_FACTOR = 2.0
@@ -28,11 +27,6 @@ NUM_MICE = 3
 RESIZE_FACTOR_X = 1 # Se autocompleta cuando lee la iagen y hace resize a new_size
 RESIZE_FACTOR_Y = 1
 
-N = 161 # number of images
-#N = 242 # frames video_2 video_4
-#N = 302 # framse video_3
-#N = 1801 # framse video_5
-#N = 1801 # framse video_6
 # img size original: 640 x 480
 normal_size = (480, 640)
 new_size = (240, 320)
@@ -50,6 +44,8 @@ y_crop_max = int(normal_size[0]/20) # 16 -- 40
 #y_crop_max = int(normal_size[0]/5) #int(normal_size[0]/20) # 16 -- 40
 
 SEGMENT_COLORS = [(0,255,0),(0,255,255),(255,255,0),(255,0,255)]
+
+##############################################
 
 def init():
     # Lista para almacenar los nombres de los archivos
@@ -169,7 +165,7 @@ def split_blob_contours(blob, D, min_n_mice):
     min_n_mice = np.floor(2*(blob["area"] + 0.1 * blob["area"]) / (MIN_AREA + MAX_AREA))
     min_n_mice = min(min_n_mice, NUM_MICE) # como máximo es NUM_MICE
     min_n_mice = max(min_n_mice, 2) # como mínimo es 2
-    print("expected N mice:", min_n_mice)    
+#    print("expected N mice:", min_n_mice)    
     D_change_factor = 0.1
     max_n_points = (min_n_mice - 1) * 2 
     min_n_points = 2 
@@ -207,7 +203,7 @@ def split_blob_contours(blob, D, min_n_mice):
         n_iterations = 0
         while True:
             n_points = np.sum(scores >= D)
-            print("n_points:", n_points)    
+#            print("n_points:", n_points)    
             if D < D_min or D > D_max: # por si acaso
               print("D out of range, stopping")
               break 
@@ -216,10 +212,10 @@ def split_blob_contours(blob, D, min_n_mice):
             else:
                 if n_points > max_n_points: # too many points
                   D = D * (1 + D_change_factor)
-                  print("Increasing D to:", D)
+#                  print("Increasing D to:", D)
                 elif n_points < min_n_points: # too few points
                   D = D * (1- D_change_factor)
-                  print("Decreasing D to:", D)
+#                  print("Decreasing D to:", D)
                 else:   # just right    
                     break
                 if n_points == n_points_old:
@@ -231,7 +227,7 @@ def split_blob_contours(blob, D, min_n_mice):
             if n_iterations > 100:
                 print("Too many iterations, stopping")
                 break
-        print("Final D:", D)
+#        print("Final D:", D)
         D_final.append(D)
         widths.append(width)
         distances.append(dist)
@@ -349,46 +345,6 @@ def process_blob(blob, num_mice = NUM_MICE-1):
         split_blob_contours(blob, 20000, num_mice) # Esto habría que ajustarlo al número de ratones que ya se han detectado
 
 
-def detect_blobs(image):
-    contours, _ = cv.findContours(image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-#    contours, _ = cv.findContours(image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-    blobs = []
-    for i, contour in enumerate(contours):
-        orig_x, orig_y, width, height = cv.boundingRect(contour)
-        roi_image = image[orig_y:orig_y+height,orig_x:orig_x+width]
-        area = cv.contourArea(contour)
-        type = 0
-        if (area >= MIN_AREA) & (area <= MAX_AREA): type = 1
-        elif (area > MAX_AREA): type = 2
-        perimeter = cv.arcLength(contour, True)
-        blobs.append({
-            "i" : i
-            , "contour" : contour
-            , "origin" : (orig_x, orig_y)
-            , "size" : (width, height)
-            , "roi_image" : roi_image
-            , "area" : area
-            , "perimeter" : perimeter
-            , "type": type
-        })
-    return blobs
- 
-def process_blob(blob, num_mice = NUM_MICE-1):    
-    if blob["area"] < MIN_AREA:
-        blob["type"] = 0 # small blob
-    elif MIN_AREA <= blob["area"] <= MAX_AREA:
-        blob["type"] = 1 # medium blob
-        e = cv.fitEllipse(blob["contour"])
-        ea = (np.pi * (e[1][0]/2) * (e[1][1]/2  ))
-        if MIN_AREA < ea < MAX_AREA and max(e[1][0], e[1][1]) / min(e[1][0],e[1][1]) < ELLIPSE_RATIO_THRESHOLD:
-            blob["ellipses"].append(e)
-            blob["ellipse_area"].append(ea)
-#        print("blob ellipse:", blob["ellipses"][-1])
-    elif blob["area"] > MAX_AREA:
-        blob["type"] = 2 # large blob
-        split_blob_contours(blob, 20000, num_mice) # Esto habría que ajustarlo al número de ratones que ya se han detectado
-
-
 def write_results(image, blobs, thres, write_image_flag=True):
     SEGMENT_COLORS = [(0,255,0),(0,255,255),(255,255,0),(255,0,255)]
     output = image.copy()
@@ -430,6 +386,40 @@ def write_results(image, blobs, thres, write_image_flag=True):
         print(img_out)
         cv.imwrite(img_out,output)
 
+# Construccion de un DF con todas las filas de un mismo img_path fusionadas
+# y las columnas mus_i_x, mus_i_y, mus_i_type renumeradas consecutivamente
+def merge_blob_rows(df_blob):
+    # Detectar todas las columnas mus_i_x, mus_i_y, mus_i_type
+    mus_cols = [c for c in df_blob.columns if c.startswith("mus_")]
+    
+    # Grupo por img_path
+    grouped = df_blob.groupby("img_path")
+    merged_rows = []
+    for img_path, group in grouped:
+        new_row = {"img_path": img_path.lstrip('/')}
+        i_new = 1  # índice acumulativo para nueva numeración
+        # recorrer cada fila del grupo
+        for _, row in group.iterrows():
+            new_row["resize_x"] = row["resize_x"]
+            new_row["resize_y"] = row["resize_y"]
+            # buscar todas las parejas mus_i_x/y/type válidas
+            for i in range(1, 10):  # límite alto por seguridad
+                x_col, y_col, t_col, s_col = f"mus_{i}_x", f"mus_{i}_y", f"mus_{i}_type", f"mus_{i}_area"
+                if s_col not in row or pd.isna(row[s_col]):
+                    continue
+                # copiar datos a nuevas columnas consecutivas
+                new_row[f"mus_{i_new}_x"] = row[x_col]
+                new_row[f"mus_{i_new}_y"] = row[y_col]
+                new_row[f"mus_{i_new}_type"] = row[t_col]
+                new_row[f"mus_{i_new}_area"] = row[s_col]
+                i_new += 1
+                
+        merged_rows.append(new_row)
+    
+    # reconstruir dataframe fusionado
+    df_merged = pd.DataFrame(merged_rows)
+    return df_merged
+
 ### MAIN ################################
 
 scale_factor_x = RESIZE_FACTOR_X
@@ -438,29 +428,74 @@ bw_thre = 12 # valor optimo
 
 print(f"Processing BW_THRE={bw_thre}")
 total_blobs_local = []
-df_tmp = pd.DataFrame()
-df_times = pd.DataFrame()
-init()
-
+df = init()
+latencies = []
 for i, img in enumerate(df['img_path']):
     t_read_image, frame, resize_x, resize_y = read_image(i, ruta_carpeta, img)
     t_clean, frame_clean = clean_image(frame, bw_thre)
     t_erode, frame_clean = erode_image(frame_clean)
-    t_blobs, blobs = detect_blobs(frame_clean, img, resize_x, resize_y)
+    t_detect, blobs = detect_blobs(frame_clean, img, resize_x, resize_y)
     scale_factor_x = resize_x
     scale_factor_y = resize_y
 
     total_blobs_local.append(blobs) # process all blobs in image
+    e1 = cv.getTickCount()
     for b in blobs:
-     print("blob area = %2d" % b["area"])
-     if b["area"] < NUM_MICE*MAX_AREA:
+#     print("blob area = %2d" % b["area"])
+     if b["area"] < NUM_MICE * MAX_AREA:
         # asignamos el numero de ratones según la columna df_moveai a la que pertenece el blob
         #buscamos la columna de df_moveai que tiene el mismo img_path que el blob
 #        num_mice = df_moveai.loc[df_moveai["filename"] == b["img_path"], "num_mice"].values[0]
         num_mice = NUM_MICE - 1
         process_blob(b, num_mice)
-        
-    write_results(frame, blobs, bw_thre, write_image_flag=True)
+    e2 = cv.getTickCount()
+    t_blobs = (e2 - e1)/cv.getTickFrequency()
+    latencies.append({"t_read_image":t_read_image
+                     , "t_clean":t_clean
+                     , "t_erode":t_erode
+                     , "t_detect":t_detect
+                     , "t_blobs":t_blobs})
+    #write_results(frame, blobs, bw_thre, write_image_flag=True)
+fn = ruta_carpeta + "/no_labels_rev1/"+ str(BW_THRES) +"/latencies.csv"
+#latencies = [d for sublist in latencies for d in sublist]
+#cols = ["t_read_image", "t_gray_norm", "t_blur", "t_eq", "t_thresh", "t_dilate", "t_open", "t_contours", "t_blobs_loop", "t_blobs" ]
+#df_times = pd.DataFrame(latencies, columns = cols)
+df_times = pd.json_normalize(latencies)
+df_times.head()
+df_times.to_csv(fn)
+
+
+total_blobs_flat = [d for sublist in total_blobs_local for d in sublist]
+df_blobs_local = pd.DataFrame(total_blobs_flat)
+max_n = df_blobs_local["ellipses"].apply(len).max()
+for i in range(max_n):
+    df_blobs_local[f"mus_{i+1}_x"] = df_blobs_local["ellipses"].apply(
+        lambda lst: lst[i][0][0] if i < len(lst) else None
+    )
+    df_blobs_local[f"mus_{i+1}_y"] = df_blobs_local["ellipses"].apply(
+        lambda lst: lst[i][0][1] if i < len(lst) else None
+    )
+    df_blobs_local[f"mus_{i+1}_type"] = df_blobs_local["type"]
+    df_blobs_local[f"mus_{i+1}_area"] = df_blobs_local["ellipse_area"].apply(
+        lambda lst: lst[i] if i < len(lst) else None
+    )   
+df_merged = merge_blob_rows(df_blobs_local)
+# df_merged = df_blobs
+
+for i in range(1, 10):
+    x_col = f"mus_{i}_x"
+    y_col = f"mus_{i}_y"
+    area_col = f"mus_{i}_area"
+    if x_col in df_merged.columns:
+        df_merged[x_col] = df_merged[x_col] * scale_factor_x
+    if y_col in df_merged.columns:
+        df_merged[y_col] = df_merged[y_col] * scale_factor_y
+    if area_col in df_merged.columns:
+        df_merged[area_col] = df_merged[area_col] * (scale_factor_x * scale_factor_y)
+
+res_file = ruta_carpeta + "/no_labels_rev1/"+ str(BW_THRES) +"/detected.csv"
+df_merged.to_csv(res_file)
+
 
 #########################################
 
@@ -663,34 +698,3 @@ def updateDataFrame():
     print(fn)
     df_tmp.to_csv(fn)
 
-### MAIN #################
-df = leer_imagenes_de_carpeta(ruta_carpeta)
-df_tmp = pd.DataFrame()
-df_times = pd.DataFrame()
-nb = []
-nm = []
-if_overlaps = []
-num_inter_points = []
-times = []
-coord = [None]*3
-mus_x = np.full((3,N), None)
-mus_y = np.full((3,N), None)
-area = np.full((3,N), None)
-
-img = ruta_carpeta + df['img_path'][2]
-
-cols = ["mus_1_x", "mus_1_y", "mus_1_area", "mus_2_x", "mus_2_y", "mus_2_area", "mus_3_x", "mus_3_y", "mus_3_area"]
-
-# Para detectar mice en todas las imagenes del directorio
-#for i, img in enumerate(df['img_path']):
-#    analyze_image_from_path(i, ruta_carpeta, img)
-#updateDataFrame()
-
-#ruta_imagen = r'/img0734.png'
-ruta_imagen = r'/img0513.png'
-analyze_image_from_path(0,ruta_carpeta = ruta_carpeta, img_name = ruta_imagen)
-if cv.waitKey(1) & 0xFF == ord('q'):
-    #break
-
-#analyze_video( video_path )
-    cv.destroyAllWindows()
