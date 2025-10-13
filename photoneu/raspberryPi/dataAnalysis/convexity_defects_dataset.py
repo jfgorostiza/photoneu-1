@@ -109,7 +109,7 @@ def erode_image(frame):
      e1 = cv.getTickCount()
      frame_erode = cv.morphologyEx(frame, cv.MORPH_DILATE, kernel_3, iterations = 4)
      e2 = cv.getTickCount()
-     t_dilate = (e2 - e2)/cv.getTickFrequency()  
+     t_dilate = (e2 - e1)/cv.getTickFrequency()  
      #TODO. Include mice tail detection
      opening = cv.morphologyEx(frame_erode, cv.MORPH_OPEN, kernel_3, iterations = 6)
      e3 = cv.getTickCount()
