@@ -38,9 +38,9 @@ args = parser.parse_args()
 #cap = cv.VideoCapture(args.camera)
 #img_path = r'/home/ratoncillos/OneDrive/src/photoneu/dataset/deeplabcut/labeled-data-ordered/img0253.png'
 RESIZE_FACTOR = 2.0
-MAJOR_DEFECT_THRESHOLD = 12.0 / RESIZE_FACTOR #6.0 5.0 12.0
-MIN_AREA = 800
-MAX_AREA = 12 * MIN_AREA#2.5 * MIN_AREA
+MAJOR_DEFECT_THRESHOLD = 900 #6.0 5.0 12.0
+MIN_AREA = 500 # ver grafica de la distribucion en .ipynb
+MAX_AREA = 2003 #12 * MIN_AREA  # mice_area_mean + mice_area_std (ver .ipynb)
 thres = 49 # min B/W value for threshold
 N = 161 # number of images
 #N = 242 # frames video_2 video_4
@@ -58,16 +58,25 @@ y_crop_max = int(normal_size[0]/20) # 16 -- 40
 
 def detect_blobs(image):
     contours, _ = cv.findContours(image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
+#    contours, _ = cv.findContours(image, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
     blobs = []
     for i, contour in enumerate(contours):
         orig_x, orig_y, width, height = cv.boundingRect(contour)
         roi_image = image[orig_y:orig_y+height,orig_x:orig_x+width]
+        area = cv.contourArea(contour)
+        type = 0
+        if (area >= MIN_AREA) & (area <= MAX_AREA): type = 1
+        elif (area > MAX_AREA): type = 2
+        perimeter = cv.arcLength(contour, True)
         blobs.append({
             "i" : i
             , "contour" : contour
             , "origin" : (orig_x, orig_y)
             , "size" : (width, height)
             , "roi_image" : roi_image
+            , "area" : area
+            , "perimeter" : perimeter
+            , "type": type
         })
     return blobs
  
@@ -79,12 +88,16 @@ def process_blob(blob):
     blob["ellipses"] = []
 
     hull_idx = cv.convexHull(contour, returnPoints=False)
-    defects = cv.convexityDefects(contour, hull_idx)
+    defects = cv.convexityDefects(contour, hull_idx) 
+    #defects are: [start_point, end_point, far_index, distance]
+    # - start_point / end_point: closest points where convexHull and countour match
+    # - far_index: index to the point of the contour with maximum distance to convexHull (between start and end)
+    # - distance: between convexHull and contour point far_index.
     intersections = []
     inter_points = []
     split_contours = []
     if defects is not None :
-#       print("defects:", defects)
+       print("defects:", defects)
        for i, defect in enumerate(np.squeeze(defects, 1)):#defects.shape[0]):
           s,e,f,d = defect
           start = tuple(contour[s])
@@ -92,14 +105,15 @@ def process_blob(blob):
           far = tuple(contour[f])
           real_far_dist = d / 256.0
 #          print("real_far_dist:", real_far_dist)
-          if real_far_dist >= MAJOR_DEFECT_THRESHOLD:
+#          if real_far_dist >= MAJOR_DEFECT_THRESHOLD:
+          if d >= MAJOR_DEFECT_THRESHOLD:
                intersections.append(f)
                inter_points.append(far)
     intersections.sort()
     n_points = len(intersections)
     print("n_points:", n_points)
     print("len(contour):", len(contour))
-    if (n_points == 0):
+    if (n_points == 0) | blob["type"] == 1: # Si es de tipo 1 no hay solapamiento, luego no se hace split
         split_contours = [contour]
     elif n_points == 1:
         print("intersections[0]:", intersections[0])
@@ -229,8 +243,8 @@ def detectMice( frame, high_V, t_init_resize ):
                 box = cv.boxPoints(rect)
                 box = np.intp(box)       
                 cv.polylines(frame_defects, [split_contour], False, SEGMENT_COLORS[n%4], 2)   
-            cv.drawContours(frame_defects, [blob["hull"]], 0, (0,255,0), 2)      
-#            cv.drawContours(frame_defects, [blob["contour"]], 0, (155,100,0), 2)
+#            cv.drawContours(frame_defects, [blob["hull"]], 0, (0,255,0), 2)      
+            cv.drawContours(frame_defects, [blob["contour"]], 0, (155,100,0), 2)
             for n, p in enumerate(blob["inter_points"]):
                 cv.circle(frame_defects, p, 3, (0,0,255))
             for n, e in enumerate(blob["ellipses"]):
@@ -386,7 +400,7 @@ def updateDataFrame():
     fn += datetime.now().strftime("%Y_%m_%d_%I_%M_%S") 
     fn += "_no_labels_test_" + str(thres) + ".csv"
     
-    df_times.to_csv('../logs/no_labels_test_times.csv')
+    #df_times.to_csv('../logs/no_labels_test_times.csv')
     print(fn)
     df_tmp.to_csv(fn)
 
@@ -409,10 +423,15 @@ img = ruta_carpeta + df['img_path'][2]
 cols = ["mus_1_x", "mus_1_y", "mus_1_area", "mus_2_x", "mus_2_y", "mus_2_area", "mus_3_x", "mus_3_y", "mus_3_area"]
 
 # Para detectar mice en todas las imagenes del directorio
-for i, img in enumerate(df['img_path']):
-    analyze_image_from_path(i, ruta_carpeta, img)
-updateDataFrame()
+#for i, img in enumerate(df['img_path']):
+#    analyze_image_from_path(i, ruta_carpeta, img)
+#updateDataFrame()
+
 #ruta_imagen = r'/img0734.png'
-#analyze_image_from_path(0,ruta_carpeta = ruta_carpeta, img_name = ruta_imagen)
+ruta_imagen = r'/img0513.png'
+analyze_image_from_path(0,ruta_carpeta = ruta_carpeta, img_name = ruta_imagen)
+if cv.waitKey(1) & 0xFF == ord('q'):
+    #break
+
 #analyze_video( video_path )
-#cv.destroyAllWindows()
+    cv.destroyAllWindows()
